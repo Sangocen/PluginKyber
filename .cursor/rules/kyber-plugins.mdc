@@ -1,0 +1,90 @@
+---
+description: Contexte KYBER — plugins Lua SWBF2 (serveur dédié)
+alwaysApply: true
+---
+
+# PluginExamples — plugins KYBER (Star Wars Battlefront II)
+
+Ce dépôt contient des **exemples de plugins serveur** pour [KYBER](https://kyber.gg) (mod multiplayer SWBF2). Les plugins sont en **Lua**, chargés par le module KYBER côté serveur (et optionnellement client).
+
+> API **expérimentale** : pas de doc officielle plugins. Voir aussi `E:\workspace\Kyber_w_lan\Module\Source\Script\` (implémentation C++) et [config serveur dédié](https://docs.kyber.gg/g/hosting/dedicated-servers/config).
+
+## Déploiement serveur
+
+- Monter les plugins : `KYBER_SERVER_PLUGINS_PATH` (ex. `/mnt/battlefront/plugins`) + volume Docker `-v`.
+- Dev local : `KYBER_DEV_PLUGIN_PATH` → dossier plugin **ou** fichier `.kbplugin` / `.zip`.
+- Production : un dossier de `.kbplugin` (zip du contenu du plugin, voir CI `.github/workflows/upload.yaml`).
+- Variables utiles : `KYBER_LOG_LEVEL` (`trace`|`debug`|`info`), `KYBER_DEV_MODE`, `KYBER_PLUGIN_SETTING_*` (ex. GunGame).
+
+## Structure d’un plugin
+
+```
+MonPlugin/
+  plugin.json          # { "name": "...", "author": "..." }
+  common/__init__.lua  # optionnel, chargé en premier
+  common/sdk.lua       # helpers partagés (copier depuis les exemples)
+  server/__init__.lua  # logique serveur (realm principal)
+  client/__init__.lua  # logique client (caméra, UI…) — rare ici
+```
+
+Chargement (`ScriptManager.cpp`) : `common/__init__.lua` puis `server/__init__.lua` ou `client/__init__.lua`. Sandbox Lua : pas de `os.execute`, `os.exit`, etc.
+
+## Exemples dans ce repo
+
+| Dossier | Rôle |
+|---------|------|
+| `GunGame/` | Progression d’armes, events joueur, env `KYBER_PLUGIN_SETTING_*` |
+| `BotBalancer/` | Équilibrage bots, `ResourceManager:PartitionLoaded`, timer |
+| `OfficialServerTools/` | HTTP minimal (`SocketManager`), routes, shutdown |
+| `BattlefieldCamera/` | Plugin **client** : `ClientCameraManager:Push`, easing caméra |
+| `HVVPlaygroundPlugin/` | Chat commands, voteban, `ServerPlayer:SendMessage` |
+| `globals.lua` | Stubs EmmyLua (`EventManager`, `Console`) pour l’IDE |
+
+## API Lua exposée par KYBER
+
+Tables globales (voir sources `Lua*.cpp` dans Kyber_w_lan) :
+
+- **EventManager** — `Listen(event, fn)` ou `Listen(event, fn, table)` ; `SetCancelled(bool)` (ex. bloquer un chat).
+- **PlayerManager** — `GetPlayers()`, `GetPlayer(name)`, `CreatePlayer(name)`.
+- **ServerPlayer** — propriétés : `name`, `playerId`, `team`, `battlepoints`, `score`, `kills`, `isBot`, `isSpawned`, … ; méthodes : `SetTeam`, `SetWeapon`, `GiveBattlepoints`, `Kick`, `SetHealth`, `SetInputEnabled`, …
+- **Console** — `Execute(cmd)`, `GetSettings(category)`, `Register(group, name, desc, table)`.
+- **ResourceManager** — `LookupDataContainer(path)` ; event `ResourceManager:PartitionLoaded`.
+- **EntityManager** — création / requête d’entités (modes avancés).
+- **SocketManager** — sockets TCP (HTTP maison dans OfficialServerTools).
+- **Utils** — utilitaires client (ex. `GetClientCameraTransform`).
+
+## Événements courants (serveur)
+
+`Server:Init`, `Server:UpdatePre`, `Level:Loaded`, `Level:Complete`, `ServerPlayer:Joined`, `ServerPlayer:Spawned`, `ServerPlayer:Killed`, `ServerPlayer:Disconnect`, `ServerPlayer:SendMessage`, `ResourceManager:PartitionLoaded`.
+
+Client (si plugin client) : `Client:UpdatePre` / `Post`, `ClientCameraManager:Push`, `ClientPlayer:Spawned`.
+
+Pattern timer (copier `common/timer.lua`) :
+
+```lua
+local Timer = require "common/timer"
+EventManager.Listen("Server:UpdatePre", TimerService.update, TimerService)
+SetTimeout(function() ... end, 0.5)
+```
+
+Pattern objet :
+
+```lua
+MyPlugin = { OnSpawned = function(self, player) ... end }
+EventManager.Listen("ServerPlayer:Spawned", MyPlugin.OnSpawned, MyPlugin)
+```
+
+## Conventions de code
+
+- Lua 5.x ; `require` relatif au plugin (`require "common/sdk"`, `require "common/timer"`).
+- Chemins d’assets jeu en string Frostbite, ex. `"Gameplay/Equipment/..."`.
+- Commandes serveur via `Console.Execute("Kyber.Broadcast ...")` ou commandes moteur (`startgame`, etc.).
+- Ignorer les bots : `if player.isBot then return end`.
+- Ne pas réinventer `sdk.lua` / `timer.lua` : réutiliser ou étendre les versions des exemples.
+- Client plugins : **dépréciés** côté chargement (`KYBER_CLIENT_PLUGINS_PATH` ignoré) — privilégier le serveur sauf cas comme BattlefieldCamera en dev.
+
+## Références externes
+
+- Doc hébergement : https://docs.kyber.gg/g/hosting/dedicated-servers/config
+- Sources moteur / API : `E:\workspace\Kyber_w_lan` (notamment `Module\Source\Script\`, `Module\Source\Core\` pour les `Fire("...")` d’events).
+- README racine : liste des plugins et avertissement stabilité.
