@@ -1,8 +1,8 @@
-# Spécification v0.1 — Plugin d’équilibrage des battle points (héros)
+# Spécification v0.1.6 — Plugin d’équilibrage des battle points (héros)
 
 > **Statut :** spécification de conception — implémentation Lua non démarrée dans ce dépôt.  
 > **Public cible :** serveurs **fun only** (Galactic Assault, Supremacy, etc.).  
-> **Référence brainstorming :** [equilibrage_brainstorming.md](./equilibrage_brainstorming.md)
+> **Historique des pistes abandonnées et alternatives non retenues :** [equilibrage_brainstorming.md](./equilibrage_brainstorming.md) (ce document ne décrit que ce qui est **à implémenter**).
 
 ## 1. Objectifs
 
@@ -16,12 +16,29 @@ Dans de nombreux modes, les joueurs accumulent des **battle points** (BP) via ob
 - Même un joueur peu performant au combat **s’amuse** (objectifs, comeback).
 - **À éviter :** frustration du type « le serveur favorise les meilleurs, je meurs en boucle sans jamais de héros ».
 
-### 1.3 Hors scope v0.1
+### 1.3 Hors scope et non-objectifs v0.1
+
+**Public et modes**
 
 - Serveurs compétitifs / ranked mindset.
-- Modes **HVV**, **Co-op**, **Ewok Hunt**, **Hero Showdown**, **Hero Starfighters**.
-- Égaliser le skill pur au gunplay (le plugin cible l’**économie héros**, pas le K/D global).
-- Mod Frostbite pour changer les coûts héros côté client (complément possible plus tard).
+- Modes **HVV**, **Co-op**, **Ewok Hunt**, **Hero Showdown**, **Hero Starfighters** (liste noire §4.6).
+- Égaliser le skill pur au gunplay (cible : **économie héros**, pas le K/D global).
+
+**Économie et leviers non utilisés**
+
+- Mod Frostbite pour coûts / taux de gain BP globaux.
+- **Prix héros dynamique** par joueur (non exposé par l’API).
+- **Prélèvement BP fixe** à chaque passe (type « taxe » périodique sur le solde).
+- **Bilan comptable** dons = retraits (injection ou retrait net acceptés — §4.4).
+- **File héros virtuelle** : bloquer l’achat héros au menu tant qu’un autre joueur n’a pas ~4000 BP, ou bloquer les dominateurs de façon permanente au déploiement (ancienne piste B).
+- **Pause globale** lorsqu’un héros est déjà sur la carte.
+- **Malus à taux unique** pour tous les dominateurs éligibles (remplacé par taux **progressif** §4.3.1).
+- **Malus sur pic de BP** sur l’intervalle ou **malus à l’achat** au spawn (alternatives documentées dans le brainstorming).
+
+**Détection / UI**
+
+- Overtime et cinématiques (pas d’API phase — §4.7).
+- Liste blanche exhaustive des kits héros mods (heuristique `activeKit` — §4.2.1).
 
 ### 1.4 Définition « héros »
 
@@ -180,15 +197,7 @@ score > 1.25 * score_median  AND  K/D > 1.5   (deaths > 0 requis pour K/D)
 2. **Cooldown héros 120 s** — §4.3.3 : après une session héros, blocage **temporaire** des slots héros au déploiement via `SetInputEnabled`.
 3. **Clamp BP en héros** : pendant un run héros, max **+3000 BP** cumulés depuis le spawn héros.
 
-**Pas de prélèvement fixe par tick** (ancienne piste B / levy) — abandonné.
-
-**Rejeté :**
-
-- Pause globale « un héros est déjà sur la carte ».
-- **Piste B** — file héros « virtuelle » (bloquer l’achat héros tant qu’un joueur aidé n’a pas ~4000 BP, ou bloquer les dominateurs de façon permanente au menu).
-- **Taux de malus unique** pour tous les dominateurs (remplacé par taux progressif §4.3.1).
-
-#### 4.3.1 Malus de gain BP — taux progressif (acté)
+#### 4.3.1 Malus de gain BP — taux progressif
 
 **Éligibilité** (inchangée) — le malus ne s’applique que si :
 
@@ -203,8 +212,8 @@ ratio     = player.score / score_median          (si median > 0)
 excess    = ratio - 1                            -- 0.25 à 125 % du médian, 0.45 à 145 %, etc.
 TAUX_MALUS = min(MALUS_CAP, excess + MALUS_BASE)
 
-MALUS_BASE = 0.05   (les « +5 % ») — **acté**
-MALUS_CAP  = 0.70   (plafond du taux) — **acté**
+MALUS_BASE = 0.05   (les « +5 % »)
+MALUS_CAP  = 0.70   (plafond du taux)
 ```
 
 **Application** (une fois par passe d’équilibrage, même fréquence que les dons — voir §4.8) :
@@ -249,21 +258,15 @@ end
 
 **v2 env (prévu) :** `KYBER_PLUGIN_SETTING_MALUS_BASE`, `KYBER_PLUGIN_SETTING_MALUS_CAP`.
 
-#### 4.3.2 Dépense de BP au tick (héros / véhicule) — option 1
+#### 4.3.2 Malus et dépenses BP (héros / véhicule)
 
-Si un dominateur **vient d’acheter** un héros (~4000 BP), un véhicule ou autre dépense, son solde baisse : le **ΔBP net** sur l’intervalle est souvent **négatif** → **pas de malus** ce tick (`ΔBP > 0` uniquement).
-
-**Décision :** comportement **voulu** (la dépense vide la réserve ; cooldown + clamp héros complètent). Ne pas retirer plus que `player.battlepoints`.
-
-**Non retenu en v1 :** suivi du pic de BP sur l’intervalle (option 2) ou malus à l’achat héros (option 3) — voir [equilibrage_brainstorming.md](./equilibrage_brainstorming.md).
+Si un dominateur **dépense** des BP (héros ~4000, véhicule, etc.), le **ΔBP net** sur la passe est souvent **négatif** → **pas de malus** cette passe (`ΔBP > 0` uniquement, §4.3.1). Comportement voulu : la dépense vide déjà la réserve ; le cooldown et le clamp héros complètent.
 
 #### 4.3.3 Cooldown héros 120 s — `SetInputEnabled`
 
 **Rôle de l’API :** `player:SetInputEnabled(actionId, enabled)` active ou désactive une **action du menu de déploiement** identifiée par un entier `actionId` (côté moteur, entrée du joueur sur un slot / une colonne du déploiement). Ce n’est **pas** une modification du coût BP : le joueur voit toujours son solde ; on empêche (ou réautorise) la **sélection** d’un slot.
 
-**Usage v0.1 (retenu) :** à la **fin** d’une session héros (`ServerPlayer:Killed` ou sortie de kit héros détectée par poll `activeKit` entre deux passes), démarrer un timer **120 s** par joueur dominateur éligible ; pendant ce délai, `SetInputEnabled(..., false)` sur les **actionId des slots héros** du déploiement, puis réactiver à expiration. Même technique que `GunGame/server/input_blocks.lua` (IDs de colonnes classe `871087120` / `121` / `126` — les IDs **héros** : voir [methodologie-decouverte-actionid-deploiement.md](./methodologie-decouverte-actionid-deploiement.md) et plugin sonde [spec-deploy-action-probe.md](./spec-deploy-action-probe.md)).
-
-**Différence avec la piste B (rejetée) :** la piste B bloquait l’achat héros selon l’**état économique des autres** (file virtuelle). Ici, blocage **temporaire et individuel** après **sa** session héros, pour limiter l’enchaînement.
+À la **fin** d’une session héros (`ServerPlayer:Killed` ou sortie de kit détectée par poll `activeKit` entre deux passes), démarrer un timer **120 s** pour ce joueur dominateur ; pendant le délai, `SetInputEnabled(..., false)` sur les **actionId des slots héros** (par joueur, par slot — §1.3). Réactiver à expiration. Technique proche de `GunGame/server/input_blocks.lua` ; IDs **héros** : [methodologie-decouverte-actionid-deploiement.md](./methodologie-decouverte-actionid-deploiement.md), [spec-deploy-action-probe.md](./spec-deploy-action-probe.md).
 
 **Fin de session héros :** `ServerPlayer:Killed` ; si le joueur change de kit sans mourir, comparer `isPlayingHero` entre deux passes (pas d’event dédié).
 
@@ -274,21 +277,16 @@ Si un dominateur **vient d’acheter** un héros (~4000 BP), un véhicule ou aut
 - **Malus :** avec la règle `isSpawned` (§4.3.1), pas de malus sur l’écran de sélection classique (souvent `isSpawned == false` après une mort).
 - **Dons :** peuvent toujours s’appliquer en veille déploiement si le joueur est éligible et la passe globale est active — en pratique rare au début de manche (MIN_GAP).
 
-### 4.4 Économie BP — pas de bilan à l’équilibre
+### 4.4 Économie BP
 
-**Décision :** le plugin **n’a pas** à équilibrer comptablement dons et retraits. Il est acceptable que :
+Le plugin **n’impose pas** l’égalité comptable dons / retraits (injection ou retrait net possibles). Objectif : **ressenti fun** et rotation héros. Dons et malus sur ΔBP sont des leviers **indépendants**.
 
-- la somme des **dons** dépasse les BP **repris** aux dominateurs (injection nette) ;
-- ou l’**inverse** (retrait net).
-
-Objectif : **ressenti fun** et rotation héros, pas une économie fermée à somme nulle. Les dons et le malus sur ΔBP sont des leviers **indépendants**.
-
-- Ne pas cibler **uniquement** le #1 au score pour le malus (seuil 125 % + K/D + taux progressif).
+Le malus dominateur s’applique à **tous** ceux au-dessus de 125 % du médian avec K/D > 1,5 — pas seulement au #1 au score.
 
 ### 4.5 Héros — coût effectif
 
 - Coût moteur : **~4000 BP** (non modifiable par joueur via l’API actuelle).
-- Contournements plugin : clamp, malus gain progressif, cooldown héros (`SetInputEnabled`, §4.3.3) — pas de file héros globale (piste B écartée).
+- Leviers plugin : malus sur ΔBP, clamp en session héros, cooldown au déploiement (`SetInputEnabled`, §4.3.3).
 
 ### 4.6 Modes — liste noire
 
@@ -357,7 +355,7 @@ Pas de spam à chaque tick.
 
 ---
 
-## 6. Scénarios de référence (Piste A)
+## 6. Scénarios de référence
 
 **Hypothèses :** médiane score = 10 000 → aide si score < 7 500 ; dominateur si score > 12 500 et K/D > 1,5 ; MIN_GAP = 3000 ; défauts FACTOR/TICK_SEC/DON_CAP.
 
@@ -394,9 +392,10 @@ Pas de spam à chaque tick.
 | Combat minimum | `5` | kills + deaths |
 | Cooldown héros | `120` s | Anti-enchaînement |
 | Gain max en héros | `3000` BP | Clamp session héros |
-| Malus base (`MALUS_BASE`) | `0.05` | Constante ajoutée à `excess` (+5 %) — acté |
-| Malus plafond (`MALUS_CAP`) | `0.70` | Taux max sur les gains BP — acté |
-| Coût héros effectif | `4000` | Référence file virtuelle |
+| Malus base (`MALUS_BASE`) | `0.05` | Constante ajoutée à `excess` (+5 %) |
+| Malus plafond (`MALUS_CAP`) | `0.70` | Taux max sur les gains BP |
+| `DEPLOY_GRACE_SEC` | `90` | Silence après `Level:Loaded` (§4.7) |
+| Coût héros effectif | `4000` | Référence moteur |
 
 ---
 
@@ -440,6 +439,7 @@ Pas de spam à chaque tick.
 
 | Version | Date | Changements |
 |---------|------|-------------|
+| 0.1.6 | 2026-05-29 | Allègement spec : non-objectifs §1.3 ; pistes rejetées → brainstorming uniquement |
 | 0.1.5 | 2026-05-29 | Phases silencieuses corrigées ; K/D 0,5–1,5 ; cooldown `SetInputEnabled` ; malus si `isSpawned` ; ordre passe §4.8 ; limites `isPlayingHero` |
 | 0.1.4 | 2026-05-28 | §4.3.2 dépense BP au tick — option 1 (malus sur ΔBP net uniquement) |
 | 0.1.3 | 2026-05-28 | `MALUS_CAP` 0,70 acté ; économie non à l’équilibre ; pas de prélèvement fixe |
