@@ -1,6 +1,6 @@
 # Spécification v0.1 — Plugin sonde `DeployActionProbe`
 
-> **Statut :** spécification de conception — outil **dev / playtest** uniquement.  
+> **Statut :** implémenté (`DeployActionProbe/`) — outil **dev / playtest** uniquement.  
 > **But :** identifier les `actionId` KYBER (`SetInputEnabled`) des **slots héros** au menu de déploiement.  
 > **Consommateur :** [spec-battlepoint-equilibrage.md](./spec-battlepoint-equilibrage.md) §4.3.3 (cooldown héros 120 s).  
 > **Procédure playtest :** [methodologie-decouverte-actionid-deploiement.md](./methodologie-decouverte-actionid-deploiement.md).

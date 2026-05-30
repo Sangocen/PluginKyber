@@ -1,7 +1,7 @@
 # Méthodologie — Découverte des `actionId` de déploiement (slots héros)
 
 > **Objectif :** trouver les entiers passés à `player:SetInputEnabled(actionId, enabled)` qui correspondent aux **slots héros** du menu de déploiement (~4000 BP), pour le cooldown du [BattlepointBalancer](./spec-battlepoint-equilibrage.md).  
-> **Outil recommandé :** plugin [DeployActionProbe](./spec-deploy-action-probe.md) (spec + implémentation à venir dans ce dépôt).
+> **Outil recommandé :** plugin [DeployActionProbe](../DeployActionProbe/) ([spec](./spec-deploy-action-probe.md)).
 
 ---
 

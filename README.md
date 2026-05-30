@@ -16,6 +16,7 @@ For deployment, API patterns, and conventions, see [`.cursor/rules/kyber-plugins
 | [BotBalancer](BotBalancer) | Fills bot slots from gamemode capacity, shuffles/balances human teams on whitelisted PvP modes. |
 | [BotDifficulty](BotDifficulty) | Sets and maintains bot AI difficulty (`AimNoiseScale`); chat command `/bd`. |
 | [CoopTeamFix](CoopTeamFix) | Keeps human players on the correct coop faction; disables engine team balancing. |
+| [DeployActionProbe](DeployActionProbe) | **Dev only:** chat `/probe` commands to find deploy-menu `actionId`s (hero slots). |
 | [GunGame](GunGame) | Gun Game mode: progress through weapons on each kill. |
 | [HVVPlaygroundPlugin](HVVPlaygroundPlugin) | Chat commands for voteban and team swap. |
 | [OfficialServerTools](OfficialServerTools) | Utilities for official dedicated servers (HTTP, routes, shutdown). |
